@@ -353,6 +353,10 @@ func WithStatsHandler(h stats.Handler) DialOption {
 // anything useful unless you are also using WithBlock().
 //
 // This is an EXPERIMENTAL API.
+//遇到non-temporary是否立马失败返回，
+//如果是true，表示立马失败返回，不错重试
+//如果是false，表示不立马返回，会做重试，默认是这个
+//配合WithBlock()来使用的，
 func FailOnNonTempDialError(f bool) DialOption {
 	return newFuncDialOption(func(o *dialOptions) {
 		o.copts.FailOnNonTempDialError = f

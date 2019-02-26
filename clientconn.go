@@ -209,11 +209,11 @@ func DialContext(ctx context.Context, target string, opts ...DialOption) (conn *
 			MaxDelay: DefaultBackoffConfig.MaxDelay,
 		}
 	}
-	if cc.dopts.resolverBuilder == nil {
+	if cc.dopts.resolverBuilder == nil {//采用etcd的方式会走到这里
 		// Only try to parse target when resolver builder is not already set.
-		cc.parsedTarget = parseTarget(cc.target)
+		cc.parsedTarget = parseTarget(cc.target)//对于etcd的模式来说，cc.parsedTarget就是etcd指定的那个key
 		grpclog.Infof("parsed scheme: %q", cc.parsedTarget.Scheme)
-		cc.dopts.resolverBuilder = resolver.Get(cc.parsedTarget.Scheme)
+		cc.dopts.resolverBuilder = resolver.Get(cc.parsedTarget.Scheme)//Scheme为空，所以为nil
 		if cc.dopts.resolverBuilder == nil {
 			// If resolver builder is still nil, the parse target's scheme is
 			// not registered. Fallback to default resolver and set Endpoint to
@@ -285,13 +285,15 @@ func DialContext(ctx context.Context, target string, opts ...DialOption) (conn *
 			if s == connectivity.Ready {
 				break
 			} else if cc.dopts.copts.FailOnNonTempDialError && s == connectivity.TransientFailure {
+				//如果FailOnNonTempDialError（遇到non-temporary错误立马返回）&& 当前状态为暂时性错误(TransientFailure,???)
 				if err = cc.blockingpicker.connectionError(); err != nil {
 					terr, ok := err.(interface{ Temporary() bool })
+					//这里确认是不是非临时的
 					if ok && !terr.Temporary() {
 						return nil, err
 					}
 				}
-			}
+			}//等待状态改变
 			if !cc.WaitForStateChange(ctx, s) {
 				// ctx got timeout or canceled.
 				return nil, ctx.Err()
@@ -313,6 +315,7 @@ type connectivityStateManager struct {
 // updateState updates the connectivity.State of ClientConn.
 // If there's a change it notifies goroutines waiting on state change to
 // happen.
+//这个函数只有在(ccb *ccBalancerWrapper) UpdateBalancerStat里面调用
 func (csm *connectivityStateManager) updateState(state connectivity.State) {
 	csm.mu.Lock()
 	defer csm.mu.Unlock()
@@ -325,7 +328,7 @@ func (csm *connectivityStateManager) updateState(state connectivity.State) {
 	csm.state = state
 	if csm.notifyChan != nil {
 		// There are other goroutines waiting on this channel.
-		close(csm.notifyChan)
+		close(csm.notifyChan)//close之后,notifyChan能收到消息,通知到  (cc *ClientConn) WaitForStateChange
 		csm.notifyChan = nil
 	}
 }
@@ -387,7 +390,7 @@ func (cc *ClientConn) WaitForStateChange(ctx context.Context, sourceState connec
 	select {
 	case <-ctx.Done():
 		return false
-	case <-ch:
+	case <-ch://这里只有在csMgr.updateState 被调用的时候才会触发
 		return true
 	}
 }
